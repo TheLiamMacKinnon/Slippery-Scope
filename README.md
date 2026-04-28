@@ -6,7 +6,7 @@ Visually Abysmal(Visuals not top priority)
 
 Potential future changes:
 
-Creating a local cache to increase the AI's awareness
-Visual updates
-Player profiles
-Multiplayer? Not really the point but could be cool
+Creating a local cache to increase the AI's awareness.\n
+Visual updates.\n
+Player profiles.\n
+Multiplayer? Not really the point but could be cool.\n
