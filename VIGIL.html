@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Slippery Scope — Vigil.AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --red: #c0392b; --red-bright: #e74c3c; --red-glow: rgba(192,57,43,0.6);
+  --white: #f0ece4; --dark: #000;
+}
+body { background:#000; color:var(--white); font-family:'Rajdhani',sans-serif; overflow:hidden; width:100vw; height:100vh; position:relative; cursor:crosshair; }
+
+/* ── SCANLINES ── */
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:200;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+}
+body::after {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:199;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.8) 100%);
+}
+
+/* ── CANVAS ── */
+#gameCanvas { position:absolute; top:0; left:0; width:100%; height:100%; display:none; }
+
+/* ── SCREENS ── */
+.screen { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+.hidden { display:none !important; }
+
+/* ── CORNERS ── */
+.corner { position:fixed; width:60px; height:60px; opacity:0.25; z-index:201; pointer-events:none; }
+.corner::before,.corner::after { content:''; position:absolute; background:var(--red); }
+.corner::before { width:100%; height:2px; top:0; left:0; }
+.corner::after  { width:2px; height:100%; top:0; left:0; }
+.corner.tl { top:24px; left:24px; }
+.corner.tr { top:24px; right:24px; transform:scaleX(-1); }
+.corner.bl { bottom:24px; left:24px; transform:scaleY(-1); }
+.corner.br { bottom:24px; right:24px; transform:scale(-1); }
+
+/* ── MENU ── */
+#menuScreen { background:#000; }
+.scope-ring {
+  width:180px; height:180px; border-radius:50%;
+  border:2px solid rgba(192,57,43,0.3);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; margin-bottom:28px;
+  animation:rotateSlow 20s linear infinite;
+}
+.scope-ring::before { content:''; position:absolute; inset:8px; border-radius:50%; border:1px solid rgba(192,57,43,0.15); }
+.scope-inner {
+  width:120px; height:120px; border-radius:50%;
+  border:1px solid rgba(192,57,43,0.5);
+  display:flex; align-items:center; justify-content:center;
+  animation:rotateSlow 20s linear infinite reverse; position:relative;
+}
+.scope-inner::before { content:''; position:absolute; width:100%; height:1px; background:rgba(192,57,43,0.4); }
+.scope-inner::after  { content:''; position:absolute; width:1px; height:100%; background:rgba(192,57,43,0.4); }
+.scope-dot { width:8px; height:8px; border-radius:50%; background:var(--red-bright); box-shadow:0 0 12px 4px var(--red-glow); animation:pulse 2s ease-in-out infinite; z-index:1; }
+@keyframes rotateSlow { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes pulse { 0%,100%{box-shadow:0 0 12px 4px var(--red-glow)} 50%{box-shadow:0 0 24px 8px var(--red-glow)} }
+.title { font-family:'Cinzel Decorative',serif; font-size:5rem; font-weight:900; letter-spacing:0.04em; line-height:1; color:var(--white); text-shadow:0 0 40px rgba(192,57,43,0.5),0 0 80px rgba(192,57,43,0.2),2px 2px 0 rgba(192,57,43,0.3); animation:titleFlicker 6s ease-in-out infinite; }
+@keyframes titleFlicker { 0%,95%,100%{opacity:1} 96%{opacity:0.85} 97%{opacity:1} 98%{opacity:0.9} }
+.subtitle { font-size:0.8rem; font-weight:300; letter-spacing:0.45em; color:var(--red); text-transform:uppercase; margin-top:10px; opacity:0.8; }
+.divider { display:flex; align-items:center; gap:12px; margin:28px 0; width:320px; }
+.divider-line { flex:1; height:1px; background:linear-gradient(to right,transparent,rgba(192,57,43,0.5),transparent); }
+.divider-diamond { width:6px; height:6px; background:var(--red); transform:rotate(45deg); box-shadow:0 0 8px var(--red-glow); }
+.buttons { display:flex; flex-direction:column; gap:16px; width:300px; }
+.btn {
+  position:relative; padding:16px 0;
+  font-family:'Rajdhani',sans-serif; font-size:1rem; font-weight:500;
+  letter-spacing:0.3em; text-transform:uppercase; text-align:center;
+  cursor:crosshair; border:none; background:transparent; color:var(--white);
+  transition:color 0.2s; overflow:hidden;
+}
+.btn::before { content:''; position:absolute; inset:0; border:1px solid rgba(192,57,43,0.35); transition:border-color 0.2s,box-shadow 0.2s; }
+.btn::after  { content:''; position:absolute; inset:0; background:var(--red); transform:translateX(-101%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1); z-index:-1; }
+.btn:hover::after  { transform:translateX(0); }
+.btn:hover::before { border-color:var(--red-bright); box-shadow:0 0 20px var(--red-glow); }
+.btn:hover { color:#fff; }
+.btn.primary::before { border-color:rgba(192,57,43,0.7); box-shadow:0 0 12px rgba(192,57,43,0.2); }
+.btn .acc { position:absolute; width:8px; height:8px; border-color:var(--red); border-style:solid; opacity:0.6; transition:opacity 0.2s; }
+.btn:hover .acc { opacity:1; }
+.btn .acc.tl { top:3px; left:3px; border-width:1px 0 0 1px; }
+.btn .acc.tr { top:3px; right:3px; border-width:1px 1px 0 0; }
+.btn .acc.bl { bottom:3px; left:3px; border-width:0 0 1px 1px; }
+.btn .acc.br { bottom:3px; right:3px; border-width:0 1px 1px 0; }
+.version { margin-top:40px; font-size:0.65rem; letter-spacing:0.3em; color:rgba(255,255,255,0.15); text-transform:uppercase; }
+
+/* ── SETTINGS ── */
+#settingsScreen { background:#000; gap:24px; }
+.settings-box { border:1px solid rgba(192,57,43,0.3); padding:40px 60px; width:500px; display:flex; flex-direction:column; gap:20px; }
+.settings-title { font-family:'Cinzel Decorative',serif; font-size:1.8rem; color:var(--white); text-align:center; margin-bottom:10px; }
+.setting-row { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:16px; }
+.setting-label { font-size:0.9rem; letter-spacing:0.2em; text-transform:uppercase; color:rgba(255,255,255,0.7); }
+.setting-val { font-size:1rem; color:var(--red-bright); font-weight:600; min-width:60px; text-align:right; }
+input[type=range] { -webkit-appearance:none; width:120px; height:2px; background:rgba(192,57,43,0.3); outline:none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; background:var(--red-bright); border-radius:50%; cursor:pointer; box-shadow:0 0 6px var(--red-glow); }
+
+/* ── HUD ── */
+#hud { position:absolute; inset:0; pointer-events:none; display:none; z-index:50; }
+#roundDisplay { position:absolute; top:30px; left:50%; transform:translateX(-50%); font-family:'Rajdhani',sans-serif; font-size:1.1rem; letter-spacing:0.3em; text-transform:uppercase; color:var(--white); text-shadow:0 0 10px rgba(0,0,0,0.8); }
+#vigilPanel { position:absolute; bottom:30px; right:40px; font-size:0.7rem; letter-spacing:0.25em; text-transform:uppercase; color:rgba(192,57,43,0.7); text-align:right; }
+#audioIndicator { position:absolute; bottom:30px; left:40px; display:flex; align-items:center; gap:8px; opacity:0; transition:opacity 0.3s; }
+#audioIndicator .bar { width:3px; background:var(--red); border-radius:2px; animation:audioBar 0.4s ease-in-out infinite alternate; }
+#audioIndicator .bar:nth-child(2){animation-delay:0.1s}
+#audioIndicator .bar:nth-child(3){animation-delay:0.2s}
+@keyframes audioBar { from{height:4px} to{height:16px} }
+#audioIndicator span { font-size:0.65rem; letter-spacing:0.2em; color:rgba(192,57,43,0.6); text-transform:uppercase; }
+#crosshair { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
+#killFlash { position:absolute; inset:0; background:rgba(192,57,43,0.25); opacity:0; pointer-events:none; transition:opacity 0.1s; }
+#hitMarker { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0; transition:opacity 0.15s; }
+
+/* ── POST MATCH ── */
+#postScreen { background:rgba(0,0,0,0.92); z-index:100; gap:16px; }
+#postResult { font-family:'Cinzel Decorative',serif; font-size:5rem; font-weight:900; letter-spacing:0.06em; }
+#postResult.win { color:var(--white); text-shadow:0 0 40px rgba(192,57,43,0.6); }
+#postResult.loss { color:var(--red); text-shadow:0 0 40px rgba(192,57,43,0.4); }
+#postSummary { max-width:600px; text-align:center; font-size:0.95rem; line-height:1.8; letter-spacing:0.05em; color:rgba(255,255,255,0.6); border:1px solid rgba(192,57,43,0.2); padding:24px 32px; margin:16px 0; }
+#postSummary .summary-title { color:var(--red); letter-spacing:0.3em; font-size:0.75rem; text-transform:uppercase; margin-bottom:12px; }
+#ollamaStatus { font-size:0.7rem; letter-spacing:0.2em; color:rgba(192,57,43,0.5); text-transform:uppercase; margin-bottom:8px; }
+.post-buttons { display:flex; gap:20px; margin-top:16px; }
+.post-buttons .btn { width:200px; }
+
+/* ── PARTICLES ── */
+.particle { position:fixed; width:2px; height:2px; background:var(--red); border-radius:50%; opacity:0; animation:floatUp linear infinite; pointer-events:none; z-index:198; }
+@keyframes floatUp { 0%{opacity:0;transform:translateY(0) translateX(0)} 10%{opacity:0.4} 90%{opacity:0.1} 100%{opacity:0;transform:translateY(-80vh) translateX(30px)} }
+</style>
+</head>
+<body>
+
+<!-- CORNER BRACKETS -->
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- GAME CANVAS -->
+<canvas id="gameCanvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="roundDisplay">Round <span id="roundNum">1</span> &nbsp;·&nbsp; Player <span id="playerScore">0</span> &nbsp;|&nbsp; AI <span id="aiScore">0</span></div>
+  <div id="vigilPanel">Vigil.AI &nbsp;·&nbsp; Session <span id="sessionNum">1</span><br><span style="color:rgba(255,255,255,0.2);font-size:0.6rem">AI has learned from <span id="learnedSessions">0</span> matches</span></div>
+  <div id="controlsHint" style="position:absolute;bottom:30px;left:50%;transform:translateX(-50%);font-size:0.6rem;letter-spacing:0.2em;color:rgba(255,255,255,0.15);text-transform:uppercase;text-align:center">WASD · Move &nbsp;|&nbsp; ←/→ · Aim &nbsp;|&nbsp; ↑ · Scope &nbsp;|&nbsp; Space · Fire &nbsp;|&nbsp; Mouse also supported</div>
+  <div id="audioIndicator">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <span>Footsteps Detected</span>
+  </div>
+  <div id="crosshair"></div>
+  <div id="killFlash"></div>
+  <div id="hitMarker">
+    <svg width="30" height="30" viewBox="0 0 30 30">
+      <line x1="0" y1="0" x2="10" y2="10" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="20" y1="0" x2="30" y2="10" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="0" y1="20" x2="10" y2="30" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="20" y1="20" x2="30" y2="30" stroke="#e74c3c" stroke-width="2"/>
+    </svg>
+  </div>
+</div>
+
+<!-- MAIN MENU -->
+<div id="menuScreen" class="screen">
+  <div class="scope-ring"><div class="scope-inner"><div class="scope-dot"></div></div></div>
+  <div style="text-align:center;margin-bottom:12px">
+    <div class="title">Slippery Scope</div>
+    <div class="subtitle">Adaptive AI Sniper Arena &nbsp;·&nbsp; Vigil.AI</div>
+  </div>
+  <div class="divider"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+  <div class="buttons">
+    <button class="btn primary" onclick="startGame()">
+      <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+      Start Game
+    </button>
+    <button class="btn" onclick="showSettings()">
+      <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+      Settings
+    </button>
+  </div>
+  <div class="version">Vigil.AI &nbsp;·&nbsp; v0.1 Alpha &nbsp;·&nbsp; 2026</div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settingsScreen" class="screen hidden">
+  <div class="settings-box">
+    <div class="settings-title">Settings</div>
+    <div class="setting-row">
+      <span class="setting-label">Mouse Sensitivity</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="range" min="1" max="10" value="5" id="sensitivitySlider" oninput="updateSetting('sensitivity',this.value)">
+        <span class="setting-val" id="sensitivityVal">5</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Audio Volume</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="range" min="0" max="10" value="7" id="volumeSlider" oninput="updateSetting('volume',this.value)">
+        <span class="setting-val" id="volumeVal">7</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">FOV</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="range" min="50" max="90" value="66" id="fovSlider" oninput="updateSetting('fov',this.value)">
+        <span class="setting-val" id="fovVal">66</span>
+      </div>
+    </div>
+    <div class="setting-row" style="border:none;padding:0">
+      <span class="setting-label">Reset AI Learning</span>
+      <button class="btn" style="width:140px;padding:10px 0;font-size:0.75rem" onclick="resetAI()">
+        <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+        Reset
+      </button>
+    </div>
+  </div>
+  <button class="btn" style="width:200px;margin-top:24px" onclick="showMenu()">
+    <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+    Back
+  </button>
+</div>
+
+<!-- POST MATCH -->
+<div id="postScreen" class="screen hidden">
+  <div id="postResult">VICTORY</div>
+  <div class="divider" style="width:400px"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+  <div id="postSummary">
+    <div class="summary-title">Vigil.AI Behavioral Analysis</div>
+    <div id="summaryText">Analyzing your combat patterns...</div>
+  </div>
+  <div id="ollamaStatus">Consulting Vigil.AI...</div>
+  <div class="post-buttons">
+    <button class="btn primary" onclick="startGame()">
+      <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+      Play Again
+    </button>
+    <button class="btn" onclick="showMenu()">
+      <span class="acc tl"></span><span class="acc tr"></span><span class="acc bl"></span><span class="acc br"></span>
+      Main Menu
+    </button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════
+let SCREEN_W = window.innerWidth, SCREEN_H = window.innerHeight;
+const MAP_W = 20, MAP_H = 20;
+const CELL = 64;
+const OLLAMA_URL = 'http://localhost:11434/api/chat';
+const MODEL = 'llama3';
+
+// Map: 1=wall, 0=open
+const MAP = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1],
+  [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
+  [1,0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,1],
+  [1,0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,1],
+  [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+  [1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let gameRunning = false;
+let scoped = false;
+let animId = null;
+
+const settings = { sensitivity: 5, volume: 7, fov: 66 };
+
+// Player
+const player = {
+  x: 9.5 * CELL, y: 17 * CELL,
+  angle: -Math.PI / 2,
+  speed: 2.5,
+  alive: true,
+  peekCount: { left: 0, right: 0 },
+  moveAfterShot: false,
+  shotsTaken: 0,
+  posHistory: [],
+  lastShotPos: null,
+  repositions: 0
+};
+
+// AI params (loaded from localStorage, with defaults)
+let aiParams = {
+  reactionTime: 1800,
+  aimSpread: 0.18,
+  peekDuration: 2200,
+  aggressionLevel: 0.2,
+  audioSensitivity: 0.1
+};
+
+const ai = {
+  x: 9.5 * CELL, y: 2.5 * CELL,
+  angle: Math.PI / 2,
+  alive: true,
+  state: 'HIDING',
+  stateTimer: 0,
+  targetAngle: Math.PI / 2,
+  lastHeardPos: null,
+  coverPos: { x: 9.5 * CELL, y: 2.5 * CELL },
+  peekDir: 1,
+  shootTimer: 0,
+  speed: 1.8
+};
+
+let playerScore = 0, aiScore = 0, roundNum = 1;
+let sessionData = {};
+
+// ═══════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════
+function loadPersistence() {
+  try {
+    const stored = localStorage.getItem('vigil_ai_params');
+    if (stored) aiParams = { ...aiParams, ...JSON.parse(stored) };
+    const sessions = localStorage.getItem('vigil_session_count');
+    document.getElementById('sessionNum').textContent = sessions ? parseInt(sessions)+1 : 1;
+    document.getElementById('learnedSessions').textContent = sessions || '0';
+  } catch(e) {}
+}
+
+function savePersistence(newParams) {
+  try {
+    localStorage.setItem('vigil_ai_params', JSON.stringify(newParams));
+    const prev = parseInt(localStorage.getItem('vigil_session_count') || '0');
+    localStorage.setItem('vigil_session_count', prev + 1);
+  } catch(e) {}
+}
+
+function resetAI() {
+  localStorage.removeItem('vigil_ai_params');
+  localStorage.removeItem('vigil_session_count');
+  localStorage.removeItem('vigil_win_loss');
+  aiParams = { reactionTime:1800, aimSpread:0.18, peekDuration:2200, aggressionLevel:0.2, audioSensitivity:0.1 };
+  document.getElementById('sessionNum').textContent = '1';
+  document.getElementById('learnedSessions').textContent = '0';
+  alert('Vigil.AI memory wiped. Starting fresh.');
+}
+
+// ═══════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════
+let audioCtx = null;
+let masterGain = null;
+let audioIndicatorTimeout = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = settings.volume / 10;
+  masterGain.connect(audioCtx.destination);
+}
+
+function playFootstep(panValue, volume) {
+  if (!audioCtx) return;
+  const bufferSize = audioCtx.sampleRate * 0.08;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = Math.max(0, Math.min(1, volume)) * 0.6;
+  const panner = audioCtx.createStereoPanner();
+  panner.pan.value = Math.max(-1, Math.min(1, panValue));
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 400 + Math.random() * 200;
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(panner);
+  panner.connect(masterGain);
+  source.start();
+}
+
+function playGunshot(isPlayer) {
+  if (!audioCtx) return;
+  const bufferSize = audioCtx.sampleRate * 0.3;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2) * (i < 1000 ? 1 : 0.3);
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = isPlayer ? 0.9 : 0.5;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 200;
+  filter.Q.value = 0.5;
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(masterGain);
+  source.start();
+}
+
+let playerStepDist = 0, aiStepDist = 0;
+const STEP_INTERVAL = 60;
+
+function updateAudio() {
+  // Player footsteps (not spatialized)
+  const moving = keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
+  if (moving) {
+    playerStepDist++;
+    if (playerStepDist >= STEP_INTERVAL) {
+      playerStepDist = 0;
+      playFootstep(0, 0.3);
+    }
+  }
+
+  // AI footsteps (spatialized)
+  if (ai.alive && ai.state === 'REPOSITIONING') {
+    aiStepDist++;
+    if (aiStepDist >= STEP_INTERVAL) {
+      aiStepDist = 0;
+      const dx = ai.x - player.x;
+      const dy = ai.y - player.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const maxDist = MAP_W * CELL * 0.8;
+      const vol = Math.max(0, 1 - dist / maxDist);
+
+      // Pan based on angle relative to player facing
+      const angleToAI = Math.atan2(dy, dx);
+      let relAngle = angleToAI - player.angle;
+      while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+      while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+      const pan = Math.sin(relAngle);
+
+      playFootstep(pan, vol * 1.2);
+
+      // Show audio indicator if close enough
+      if (vol > 0.25) {
+        const ind = document.getElementById('audioIndicator');
+        ind.style.opacity = '1';
+        clearTimeout(audioIndicatorTimeout);
+        audioIndicatorTimeout = setTimeout(() => ind.style.opacity = '0', 800);
+
+        // AI audio awareness
+        if (Math.random() < aiParams.audioSensitivity) {
+          ai.lastHeardPos = { x: player.x, y: player.y };
+        }
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// RAYCASTER
+// ═══════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function castRay(angle) {
+  let rayX = player.x, rayY = player.y;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const stepSize = 1;
+  let dist = 0;
+  let hit = false;
+  while (!hit && dist < MAP_W * CELL) {
+    rayX += cos * stepSize;
+    rayY += sin * stepSize;
+    dist += stepSize;
+    const mapX = Math.floor(rayX / CELL);
+    const mapY = Math.floor(rayY / CELL);
+    if (mapX < 0 || mapX >= MAP_W || mapY < 0 || mapY >= MAP_H) { hit = true; break; }
+    if (MAP[mapY][mapX] === 1) hit = true;
+  }
+  return { dist, hitX: rayX, hitY: rayY };
+}
+
+function render() {
+  ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+
+  // Sky / floor
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H / 2);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, SCREEN_H / 2, SCREEN_W, SCREEN_H / 2);
+
+  const fovRad = (scoped ? 15 : settings.fov) * Math.PI / 180;
+  const numRays = scoped ? SCREEN_W / 2 : SCREEN_W;
+  const rayStep = fovRad / numRays;
+  const startAngle = player.angle - fovRad / 2;
+  const projDist = (SCREEN_W / 2) / Math.tan(fovRad / 2);
+
+  for (let i = 0; i < numRays; i++) {
+    const rayAngle = startAngle + i * rayStep;
+    const { dist } = castRay(rayAngle);
+    const fixedDist = dist * Math.cos(rayAngle - player.angle);
+    const wallH = Math.min(SCREEN_H, (CELL / fixedDist) * projDist);
+    const wallTop = (SCREEN_H - wallH) / 2;
+    const shade = Math.max(20, 255 - fixedDist * 0.8);
+    const r = Math.floor(shade * 0.7);
+    const g = Math.floor(shade * 0.1);
+    const b = Math.floor(shade * 0.1);
+    const x = scoped ? SCREEN_W / 4 + i : i;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, wallTop, 1, wallH);
+  }
+
+  // Render AI sprite if visible
+  if (ai.alive) renderAISprite(projDist, fovRad);
+
+  // Scope overlay
+  if (scoped) renderScope();
+
+  // Crosshair (non-scoped)
+  if (!scoped) {
+    ctx.strokeStyle = 'rgba(240,236,228,0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(SCREEN_W/2 - 12, SCREEN_H/2);
+    ctx.lineTo(SCREEN_W/2 + 12, SCREEN_H/2);
+    ctx.moveTo(SCREEN_W/2, SCREEN_H/2 - 12);
+    ctx.lineTo(SCREEN_W/2, SCREEN_H/2 + 12);
+    ctx.stroke();
+  }
+}
+
+function renderAISprite(projDist, fovRad) {
+  const dx = ai.x - player.x;
+  const dy = ai.y - player.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const angleToAI = Math.atan2(dy, dx);
+  let relAngle = angleToAI - player.angle;
+  while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+  while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+
+  if (Math.abs(relAngle) > fovRad / 2 + 0.1) return;
+  if (ai.state === 'HIDING') return;
+
+  // ── Wall occlusion check ──
+  const steps = Math.floor(dist / 4);
+  for (let i = 1; i < steps; i++) {
+    const fx = player.x + (dx / dist) * i * 4;
+    const fy = player.y + (dy / dist) * i * 4;
+    const mx = Math.floor(fx / CELL), my = Math.floor(fy / CELL);
+    if (MAP[my]?.[mx] === 1) return; // wall between player and AI, don't render
+  }
+
+  const screenX = SCREEN_W / 2 + (relAngle / (fovRad / 2)) * (SCREEN_W / 2);
+  const spriteH = Math.min(SCREEN_H, (CELL * 1.5 / dist) * projDist);
+  const spriteW = spriteH * 0.4;
+  const spriteTop = (SCREEN_H - spriteH) / 2;
+  const shade = Math.max(30, 200 - dist * 0.5);
+
+  // Body
+  ctx.fillStyle = `rgb(${Math.floor(shade*0.4)},${Math.floor(shade*0.4)},${Math.floor(shade*0.5)})`;
+  ctx.fillRect(screenX - spriteW/2, spriteTop + spriteH*0.2, spriteW, spriteH*0.65);
+  // Head
+  ctx.fillStyle = `rgb(${Math.floor(shade*0.6)},${Math.floor(shade*0.5)},${Math.floor(shade*0.4)})`;
+  const headR = spriteW * 0.45;
+  ctx.beginPath();
+  ctx.arc(screenX, spriteTop + spriteH*0.15, headR, 0, Math.PI*2);
+  ctx.fill();
+  // Red dot (scope glint)
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath();
+  ctx.arc(screenX, spriteTop + spriteH*0.15, Math.max(2, headR*0.2), 0, Math.PI*2);
+  ctx.fill();
+}
+
+function renderScope() {
+  const cx = SCREEN_W / 2, cy = SCREEN_H / 2;
+  const r = SCREEN_H * 0.45;
+
+  // Dark mask outside the scope circle
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2, true); // true = counterclockwise = punches hole
+  ctx.fillStyle = 'rgba(0,0,0,0.97)';
+  ctx.fill();
+  ctx.restore();
+
+  // Scope ring
+  ctx.strokeStyle = 'rgba(192,57,43,0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.stroke();
+
+  // Scope reticle lines
+  ctx.strokeStyle = 'rgba(240,236,228,0.85)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+  ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+  ctx.stroke();
+
+  // Center dot
+  ctx.fillStyle = 'rgba(192,57,43,0.9)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mil dots
+  ctx.fillStyle = 'rgba(240,236,228,0.6)';
+  [-r*0.33, r*0.33].forEach(offset => {
+    ctx.beginPath(); ctx.arc(cx + offset, cy, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy + offset, 2.5, 0, Math.PI*2); ctx.fill();
+  });
+
+  // Subtle vignette inside scope edge
+  const gradient = ctx.createRadialGradient(cx, cy, r*0.7, cx, cy, r);
+  gradient.addColorStop(0, 'transparent');
+  gradient.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.clip();
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════
+const keys = {};
+let mouseDX = 0;
+
+let mouseScoped = false;
+
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // Space to shoot (keyboard mode)
+  if (e.code === 'Space' && gameRunning && player.alive && scoped) {
+    e.preventDefault();
+    playerShoot();
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+document.addEventListener('mousemove', e => {
+  if (!gameRunning) return;
+  mouseDX += e.movementX;
+});
+
+canvas.addEventListener('mousedown', e => {
+  if (!gameRunning || !player.alive) return;
+  if (e.button === 2) { mouseScoped = true; scoped = true; return; }
+  if (e.button === 0 && scoped) playerShoot();
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (e.button === 2) { mouseScoped = false; }
+});
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+canvas.addEventListener('click', () => {
+  if (gameRunning) canvas.requestPointerLock();
+});
+
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== canvas && gameRunning) {
+    canvas.requestPointerLock();
+  }
+});
+
+// ═══════════════════════════════════════════
+// PLAYER MOVEMENT & SHOOTING
+// ═══════════════════════════════════════════
+function movePlayer() {
+  if (!player.alive) return;
+
+  // Mouse look
+  const sens = settings.sensitivity * 0.0005;
+  player.angle += mouseDX * sens;
+  mouseDX = 0;
+
+  // Keyboard turning — left/right arrows aim, Q/E as alternate
+  const turnSpeed = 0.018;
+  if (keys['ArrowLeft']  || keys['KeyQ']) player.angle -= turnSpeed;
+  if (keys['ArrowRight'] || keys['KeyE']) player.angle += turnSpeed;
+
+  // Keyboard scope — ArrowUp only (not W, W is move forward)
+  const kbScoped = keys['ArrowUp'];
+  if (kbScoped && !scoped) scoped = true;
+  if (!kbScoped && !mouseScoped) scoped = false;
+
+  const spd = scoped ? player.speed * 0.4 : player.speed;
+  let nx = player.x, ny = player.y;
+
+  // WASD movement only — arrow keys are now aim/scope
+  if (keys['KeyW']) { nx += Math.cos(player.angle) * spd; ny += Math.sin(player.angle) * spd; }
+  if (keys['KeyS']) { nx -= Math.cos(player.angle) * spd; ny -= Math.sin(player.angle) * spd; }
+  if (keys['KeyA']) { nx += Math.cos(player.angle - Math.PI/2) * spd; ny += Math.sin(player.angle - Math.PI/2) * spd; }
+  if (keys['KeyD']) { nx += Math.cos(player.angle + Math.PI/2) * spd; ny += Math.sin(player.angle + Math.PI/2) * spd; }
+
+  const margin = 10;
+  if (!isWall(nx, player.y, margin)) player.x = nx;
+  if (!isWall(player.x, ny, margin)) player.y = ny;
+
+  // Track position for behavioral analysis
+  player.posHistory.push({ x: player.x, y: player.y, t: Date.now() });
+  if (player.posHistory.length > 200) player.posHistory.shift();
+
+  // Track peek direction — when scoped, record which side of the map player is facing
+  if (scoped && player.alive) {
+    const dx = ai.x - player.x;
+    const dy = ai.y - player.y;
+    const angleToAI = Math.atan2(dy, dx);
+    let relAngle = angleToAI - player.angle;
+    while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+    while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+    // If AI is to the left of center aim, player is peeking from right, and vice versa
+    if (relAngle > 0.1) player.peekCount.right++;
+    else if (relAngle < -0.1) player.peekCount.left++;
+  }
+}
+
+function isWall(x, y, margin) {
+  const checks = [
+    [x - margin, y - margin], [x + margin, y - margin],
+    [x - margin, y + margin], [x + margin, y + margin]
+  ];
+  return checks.some(([cx, cy]) => {
+    const mx = Math.floor(cx / CELL), my = Math.floor(cy / CELL);
+    return mx < 0 || mx >= MAP_W || my < 0 || my >= MAP_H || MAP[my][mx] === 1;
+  });
+}
+
+function playerShoot() {
+  if (!player.alive || !scoped) return;
+  playGunshot(true);
+  player.shotsTaken++;
+  player.lastShotPos = { x: player.x, y: player.y };
+
+  // Check if AI is hit (raycast from center)
+  const hit = checkHitOnAI();
+  if (hit) {
+    killAI();
+  }
+
+  // Track if player moved after shot
+  setTimeout(() => {
+    const moved = Math.abs(player.x - (player.lastShotPos?.x || player.x)) > 20 ||
+                  Math.abs(player.y - (player.lastShotPos?.y || player.y)) > 20;
+    if (moved) player.moveAfterShot = true;
+    player.repositions++;
+  }, 500);
+}
+
+function checkHitOnAI() {
+  if (!ai.alive || ai.state === 'HIDING') return false;
+  const dx = ai.x - player.x;
+  const dy = ai.y - player.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const angleToAI = Math.atan2(dy, dx);
+  let relAngle = angleToAI - player.angle;
+  while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+  while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+  const hitRadius = Math.max(0.04, 0.015 + dist * 0.00005);
+  return Math.abs(relAngle) < hitRadius;
+}
+
+// ═══════════════════════════════════════════
+// AI LOGIC
+// ═══════════════════════════════════════════
+const COVER_SPOTS = [
+  {x:2.5,y:2.5},{x:17,y:2.5},{x:9.5,y:2.5},
+  {x:3.5,y:5.5},{x:15.5,y:5.5},{x:7.5,y:5.5},{x:12.5,y:5.5},
+  {x:5.5,y:8.5},{x:9.5,y:8.5},{x:14.5,y:8.5},
+  {x:5.5,y:10.5},{x:14.5,y:10.5},
+  {x:5.5,y:12.5},{x:9.5,y:11.5},{x:14.5,y:12.5},
+].map(p => ({x:p.x*CELL, y:p.y*CELL}));
+
+function updateAI(dt) {
+  if (!ai.alive) return;
+  ai.stateTimer -= dt;
+  ai.shootTimer -= dt;
+
+  switch (ai.state) {
+    case 'HIDING':
+      if (ai.stateTimer <= 0) {
+        // Decide: peek or reposition?
+        const roll = Math.random();
+        if (roll < aiParams.aggressionLevel && ai.stateTimer < -500) {
+          changeAIState('REPOSITIONING');
+        } else {
+          changeAIState('PEEKING');
+        }
+      }
+      // If we heard the player, face that direction
+      if (ai.lastHeardPos) {
+        const dx = ai.lastHeardPos.x - ai.x;
+        const dy = ai.lastHeardPos.y - ai.y;
+        ai.targetAngle = Math.atan2(dy, dx);
+      }
+      break;
+
+    case 'PEEKING':
+      // Rotate toward player
+      const dx = player.x - ai.x;
+      const dy = player.y - ai.y;
+      ai.targetAngle = Math.atan2(dy, dx);
+      // Lerp angle
+      let angleDiff = ai.targetAngle - ai.angle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      ai.angle += angleDiff * 0.04;
+
+      // Try to shoot if player is in sight
+      if (ai.shootTimer <= 0 && canAISeePlayer()) {
+        ai.shootTimer = aiParams.reactionTime;
+        changeAIState('SHOOTING');
+      }
+
+      if (ai.stateTimer <= 0) changeAIState('HIDING');
+      break;
+
+    case 'SHOOTING':
+      if (ai.stateTimer <= 0) {
+        aiShoot();
+        changeAIState('HIDING');
+      }
+      break;
+
+    case 'REPOSITIONING':
+      // Move toward cover spot
+      const tdx = ai.coverPos.x - ai.x;
+      const tdy = ai.coverPos.y - ai.y;
+      const tdist = Math.sqrt(tdx*tdx + tdy*tdy);
+      if (tdist < 5) {
+        changeAIState('HIDING');
+      } else {
+        const nx = ai.x + (tdx/tdist) * ai.speed;
+        const ny = ai.y + (tdy/tdist) * ai.speed;
+        if (!isWall(nx, ai.y, 8)) ai.x = nx;
+        if (!isWall(ai.x, ny, 8)) ai.y = ny;
+        ai.angle = Math.atan2(tdy, tdx);
+      }
+      if (ai.stateTimer <= 0) changeAIState('HIDING');
+      break;
+  }
+}
+
+function changeAIState(newState) {
+  ai.state = newState;
+  switch (newState) {
+    case 'HIDING':
+      ai.stateTimer = 800 + Math.random() * 600 * (1 - aiParams.aggressionLevel);
+      break;
+    case 'PEEKING':
+      ai.stateTimer = aiParams.peekDuration;
+      break;
+    case 'SHOOTING':
+      ai.stateTimer = aiParams.reactionTime;
+      break;
+    case 'REPOSITIONING':
+      // Pick a cover spot closer to player (aggression) or farther (defensive)
+      const sorted = [...COVER_SPOTS].sort((a,b) => {
+        const da = Math.hypot(a.x - player.x, a.y - player.y);
+        const db = Math.hypot(b.x - player.x, b.y - player.y);
+        return aiParams.aggressionLevel > 0.5 ? da - db : db - da;
+      });
+      ai.coverPos = sorted[Math.floor(Math.random() * 3)];
+      ai.stateTimer = 3000;
+      break;
+  }
+}
+
+function canAISeePlayer() {
+  const dx = player.x - ai.x;
+  const dy = player.y - ai.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const steps = Math.floor(dist / 4);
+  for (let i = 1; i < steps; i++) {
+    const fx = ai.x + (dx/dist) * i * 4;
+    const fy = ai.y + (dy/dist) * i * 4;
+    const mx = Math.floor(fx/CELL), my = Math.floor(fy/CELL);
+    if (MAP[my]?.[mx] === 1) return false;
+  }
+  return true;
+}
+
+function aiShoot() {
+  if (!player.alive) return;
+  playGunshot(false);
+  // Check if AI hits player (with aim spread)
+  const dx = player.x - ai.x;
+  const dy = player.y - ai.y;
+  const exactAngle = Math.atan2(dy, dx);
+  const spread = (Math.random() - 0.5) * aiParams.aimSpread;
+  const shotAngle = exactAngle + spread;
+  const angleDiff = Math.abs(shotAngle - exactAngle);
+  if (canAISeePlayer() && angleDiff < aiParams.aimSpread * 0.4) {
+    killPlayer();
+  }
+}
+
+function killAI() {
+  ai.alive = false;
+  showHitMarker();
+  flashKill();
+  setTimeout(() => endRound('player'), 600);
+}
+
+function killPlayer() {
+  player.alive = false;
+  document.getElementById('killFlash').style.opacity = '1';
+  setTimeout(() => {
+    document.getElementById('killFlash').style.opacity = '0';
+    endRound('ai');
+  }, 400);
+}
+
+// ═══════════════════════════════════════════
+// ROUND / MATCH MANAGEMENT
+// ═══════════════════════════════════════════
+function endRound(winner) {
+  if (winner === 'player') playerScore++;
+  else aiScore++;
+
+  document.getElementById('playerScore').textContent = playerScore;
+  document.getElementById('aiScore').textContent = aiScore;
+
+  if (playerScore >= 3 || aiScore >= 3) {
+    endMatch(playerScore >= 3 ? 'player' : 'ai');
+  } else {
+    roundNum++;
+    document.getElementById('roundNum').textContent = roundNum;
+    setTimeout(resetRound, 1500);
+  }
+}
+
+function resetRound() {
+  player.x = 9.5 * CELL; player.y = 17 * CELL;
+  player.angle = -Math.PI/2; player.alive = true;
+  ai.x = 9.5 * CELL; ai.y = 2.5 * CELL;
+  ai.angle = Math.PI/2; ai.alive = true;
+  changeAIState('HIDING');
+  scoped = false;
+}
+
+function endMatch(winner) {
+  gameRunning = false;
+  document.exitPointerLock();
+  cancelAnimationFrame(animId);
+
+  // Compile behavioral data
+  const leftPeeks = player.peekCount.left;
+  const rightPeeks = player.peekCount.right;
+  const total = leftPeeks + rightPeeks || 1;
+  sessionData = {
+    winner,
+    playerScore, aiScore,
+    leftPeekPct: Math.round((leftPeeks/total)*100),
+    rightPeekPct: Math.round((rightPeeks/total)*100),
+    moveAfterShot: player.moveAfterShot,
+    shotsTaken: player.shotsTaken,
+    repositions: player.repositions
+  };
+
+  showPostScreen(winner);
+  consultOllama(sessionData);
+}
+
+// ═══════════════════════════════════════════
+// OLLAMA INTEGRATION
+// ═══════════════════════════════════════════
+async function consultOllama(data) {
+  const statusEl = document.getElementById('ollamaStatus');
+  const summaryEl = document.getElementById('summaryText');
+  statusEl.textContent = 'Vigil.AI is analyzing your patterns...';
+
+  const prompt = `You are an adaptive game AI coach. Analyze this sniper duel match data and adjust the AI's behavior parameters.
+
+Match result: ${data.winner === 'player' ? 'Player won' : 'AI won'} (${data.playerScore}-${data.aiScore})
+Player peeked left: ${data.leftPeekPct}% of the time, right: ${data.rightPeekPct}% of the time
+Player moved after shooting: ${data.moveAfterShot ? 'Yes' : 'No'}
+Player shots taken: ${data.shotsTaken}
+Player repositions: ${data.repositions}
+
+Current AI parameters:
+- reactionTime: ${aiParams.reactionTime}ms (how fast AI shoots after seeing player, lower=faster)
+- aimSpread: ${aiParams.aimSpread} (0=perfect aim, 0.3=very inaccurate)
+- peekDuration: ${aiParams.peekDuration}ms (how long AI exposes itself)
+- aggressionLevel: ${aiParams.aggressionLevel} (0=defensive, 1=very aggressive)
+- audioSensitivity: ${aiParams.audioSensitivity} (how much AI uses sound to track player)
+
+Based on the player's behavior patterns, suggest updated parameters to make the AI harder to beat next match. If AI won easily, increase challenge moderately. If player won, increase challenge more. Keep values in these ranges: reactionTime 300-2000, aimSpread 0.02-0.25, peekDuration 400-2500, aggressionLevel 0.1-0.9, audioSensitivity 0.05-0.9.
+
+Respond ONLY with a JSON object like: {"reactionTime":1200,"aimSpread":0.12,"peekDuration":1800,"aggressionLevel":0.35,"audioSensitivity":0.3,"analysis":"2 sentence behavioral analysis of the player"}`;
+
+  try {
+    const response = await fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false
+      })
+    });
+
+    const result = await response.json();
+    const text = result.message?.content || '';
+
+    // Extract JSON
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const newParams = {
+        reactionTime: Math.max(300, Math.min(2000, parsed.reactionTime || aiParams.reactionTime)),
+        aimSpread: Math.max(0.02, Math.min(0.25, parsed.aimSpread || aiParams.aimSpread)),
+        peekDuration: Math.max(400, Math.min(2500, parsed.peekDuration || aiParams.peekDuration)),
+        aggressionLevel: Math.max(0.1, Math.min(0.9, parsed.aggressionLevel || aiParams.aggressionLevel)),
+        audioSensitivity: Math.max(0.05, Math.min(0.9, parsed.audioSensitivity || aiParams.audioSensitivity))
+      };
+      aiParams = newParams;
+      savePersistence(newParams);
+
+      summaryEl.innerHTML = parsed.analysis || generateFallbackAnalysis(data);
+      statusEl.textContent = 'Vigil.AI has updated its strategy for next session.';
+    } else {
+      throw new Error('No JSON found');
+    }
+  } catch (e) {
+    console.warn('Vigil.AI Ollama error:', e.message);
+    summaryEl.innerHTML = generateFallbackAnalysis(data);
+    statusEl.textContent = `Vigil.AI offline (${e.message?.slice(0,40) || 'connection failed'}) — using local analysis.`;
+    localAdapt(data);
+  }
+}
+
+function localAdapt(data) {
+  // Fallback adaptation without Ollama
+  if (data.winner === 'player') {
+    aiParams.reactionTime = Math.max(300, aiParams.reactionTime - 150);
+    aiParams.aimSpread = Math.max(0.02, aiParams.aimSpread - 0.02);
+    aiParams.aggressionLevel = Math.min(0.9, aiParams.aggressionLevel + 0.08);
+    aiParams.audioSensitivity = Math.min(0.9, aiParams.audioSensitivity + 0.08);
+  }
+  savePersistence(aiParams);
+}
+
+function generateFallbackAnalysis(data) {
+  const leftPeeks = player.peekCount.left;
+  const rightPeeks = player.peekCount.right;
+  const total = leftPeeks + rightPeeks;
+
+  if (total === 0) {
+    return `Vigil.AI noted no scoped peeking data was recorded this match. ${data.moveAfterShot ? 'You repositioned after shots.' : 'You held position after firing.'} More play data will improve analysis next session.`;
+  }
+
+  const leftPct  = Math.round((leftPeeks / total) * 100);
+  const rightPct = 100 - leftPct;
+  const dominant = leftPct >= rightPct ? 'left' : 'right';
+  const dominantPct = Math.max(leftPct, rightPct);
+
+  return `Vigil.AI observed you favored the ${dominant} approach angle ${dominantPct}% of the time (left: ${leftPct}%, right: ${rightPct}%). ${data.moveAfterShot ? 'Your habit of repositioning after shots was noted.' : 'You tended to hold position after firing — a predictable pattern.'} Vigil.AI will adapt accordingly next session.`;
+}
+
+// ═══════════════════════════════════════════
+// SCREEN MANAGEMENT
+// ═══════════════════════════════════════════
+function showMenu() {
+  document.getElementById('menuScreen').classList.remove('hidden');
+  document.getElementById('settingsScreen').classList.add('hidden');
+  document.getElementById('postScreen').classList.add('hidden');
+  document.getElementById('gameCanvas').style.display = 'none';
+  document.getElementById('hud').style.display = 'none';
+}
+
+function showSettings() {
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('settingsScreen').classList.remove('hidden');
+}
+
+function showPostScreen(winner) {
+  document.getElementById('postScreen').classList.remove('hidden');
+  document.getElementById('gameCanvas').style.display = 'none';
+  document.getElementById('hud').style.display = 'none';
+
+  const resultEl = document.getElementById('postResult');
+  resultEl.textContent = winner === 'player' ? 'VICTORY' : 'DEFEATED';
+  resultEl.className = winner === 'player' ? 'win' : 'loss';
+}
+
+function updateSetting(key, val) {
+  settings[key] = parseFloat(val);
+  document.getElementById(key + 'Val').textContent = val;
+  if (key === 'volume' && masterGain) masterGain.gain.value = val / 10;
+}
+
+function showHitMarker() {
+  const hm = document.getElementById('hitMarker');
+  hm.style.opacity = '1';
+  setTimeout(() => hm.style.opacity = '0', 300);
+}
+
+function flashKill() {
+  const kf = document.getElementById('killFlash');
+  kf.style.background = 'rgba(192,57,43,0.15)';
+  kf.style.opacity = '1';
+  setTimeout(() => kf.style.opacity = '0', 200);
+}
+
+// ═══════════════════════════════════════════
+// GAME START
+// ═══════════════════════════════════════════
+function startGame() {
+  // Reset match state
+  playerScore = 0; aiScore = 0; roundNum = 1;
+  player.peekCount = { left:0, right:0 };
+  player.moveAfterShot = false; player.shotsTaken = 0;
+  player.repositions = 0; player.posHistory = [];
+
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('settingsScreen').classList.add('hidden');
+  document.getElementById('postScreen').classList.add('hidden');
+  document.getElementById('gameCanvas').style.display = 'block';
+  document.getElementById('hud').style.display = 'block';
+  document.getElementById('playerScore').textContent = '0';
+  document.getElementById('aiScore').textContent = '0';
+  document.getElementById('roundNum').textContent = '1';
+
+  resetRound();
+  initAudio();
+  canvas.requestPointerLock();
+  gameRunning = true;
+  changeAIState('HIDING');
+
+  let lastTime = performance.now();
+  function loop(now) {
+    const dt = now - lastTime;
+    lastTime = now;
+    if (gameRunning) {
+      movePlayer();
+      updateAI(dt);
+      updateAudio();
+      render();
+      animId = requestAnimationFrame(loop);
+    }
+  }
+  animId = requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════
+// PARTICLES (menu)
+// ═══════════════════════════════════════════
+for (let i = 0; i < 18; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  p.style.left = Math.random() * 100 + 'vw';
+  p.style.bottom = '-4px';
+  p.style.animationDuration = (8 + Math.random() * 14) + 's';
+  p.style.animationDelay = (Math.random() * 12) + 's';
+  p.style.width = p.style.height = (Math.random() > 0.6 ? '3px' : '2px');
+  document.body.appendChild(p);
+}
+
+// Init
+loadPersistence();
+
+// Dynamic canvas sizing
+function resizeCanvas() {
+  SCREEN_W = window.innerWidth;
+  SCREEN_H = window.innerHeight;
+  canvas.width = SCREEN_W;
+  canvas.height = SCREEN_H;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
